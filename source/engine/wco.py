@@ -91,56 +91,56 @@ if (theDay == int(lastDay)):
 else:
     log.info('It is NOT the last day of the month, last day is %s and today is %s', lastDay, theDay)
 
-# Get all regions that run Workspaces
+# Get all regions that run Workspaces // CHANGE: cancel get all regions because the bug of get_available_regions in China
+# for i in range(0, maxRetries):
+#     log.debug('Try #%s to get_regions for WorkSpaces', i+1)
+#     try:
+#         wsRegions = boto3.session.Session().get_available_regions('workspaces')
+#         break
+#     except botocore.exceptions.ClientError as e:
+#         log.error(e)
+#         if i >= maxRetries - 1: log.error('Error processing get_regions for WorkSpaces: ExceededMaxRetries')
+#         else: time.sleep(i/10)
+
+# For each region // CHANGE: remove wsRegion and cancel foreach loop, just scan ZHY region
+totalWorkspaces = 0
+wsRegion = 'cn-northwest-1'
+regionCount += 1
+
+# Create a WS Client
+wsClient = boto3.client('workspaces', region_name=wsRegion)
+
+log.info('>>>> Scanning Workspace Directories for Region %s', wsRegion)
+
 for i in range(0, maxRetries):
-    log.debug('Try #%s to get_regions for WorkSpaces', i+1)
+    log.debug('Try #%s to get list of directories', i+1)
+
+    # Get the directories within the region
     try:
-        wsRegions = boto3.session.Session().get_available_regions('workspaces')
+        directories = wsClient.describe_workspace_directories()
         break
     except botocore.exceptions.ClientError as e:
         log.error(e)
-        if i >= maxRetries - 1: log.error('Error processing get_regions for WorkSpaces: ExceededMaxRetries')
+        if i >= maxRetries - 1: log.error('describe_workspace_directories ExceededMaxRetries')
         else: time.sleep(i/10)
 
-# For each region
-totalWorkspaces = 0
-for wsRegion in wsRegions:
-    regionCount += 1
+# For each directory
+for directory in directories["Directories"]:
+    directoryCount += 1
 
-    # Create a WS Client
-    wsClient = boto3.client('workspaces', region_name=wsRegion)
+    directoryParams = {
+        "DirectoryId": directory["DirectoryId"],
+        "Region": wsRegion,
+        "EndTime": endTime,
+        "StartTime": startTime,
+        "LastDay": str(lastDay),
+        "RunUUID": runUUID,
+        "AnonymousDataEndpoint": anonymousDataEndpoint
+    }
 
-    log.info('>>>> Scanning Workspace Directories for Region %s', wsRegion)
-
-    for i in range(0, maxRetries):
-        log.debug('Try #%s to get list of directories', i+1)
-
-        # Get the directories within the region
-        try:
-            directories = wsClient.describe_workspace_directories()
-            break
-        except botocore.exceptions.ClientError as e:
-            log.error(e)
-            if i >= maxRetries - 1: log.error('describe_workspace_directories ExceededMaxRetries')
-            else: time.sleep(i/10)
-
-    # For each directory
-    for directory in directories["Directories"]:
-        directoryCount += 1
-
-        directoryParams = {
-            "DirectoryId": directory["DirectoryId"],
-            "Region": wsRegion,
-            "EndTime": endTime,
-            "StartTime": startTime,
-            "LastDay": str(lastDay),
-            "RunUUID": runUUID,
-            "AnonymousDataEndpoint": anonymousDataEndpoint
-        }
-
-        log.info('Calling directory reader')
-        directoryReader = DirectoryReader()
-        countWorkspaces = directoryReader.read_directory(wsRegion, stackParams, directoryParams)
-        totalWorkspaces = totalWorkspaces + countWorkspaces
+    log.info('Calling directory reader')
+    directoryReader = DirectoryReader()
+    countWorkspaces = directoryReader.read_directory(wsRegion, stackParams, directoryParams)
+    totalWorkspaces = totalWorkspaces + countWorkspaces
 
 log.info('Successfully invoked directory_reader for %d workspaces in %d directories across %d regions.', totalWorkspaces, directoryCount, regionCount)
